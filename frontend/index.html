@@ -618,7 +618,7 @@ input[type=checkbox]{width:auto;accent-color:var(--ku-dodger)}
 // Toggle USE_BACKEND to connect to the Node.js REST API.
 // When false, all data lives in memory (dummy seed).
 // ═══════════════════════════════════════════════════════════
-const USE_BACKEND   = true;            // ← connected to Railway + Supabase
+const USE_BACKEND   = false;           // ← demo mode (Railway backend disabled)
 const API_TIMEOUT_MS = 8000;           // fallback to demo after 8s
 const API_BASE      = 'https://kidsunisite-production.up.railway.app/api';
 let   API_TOKEN     = '';              // set after login
