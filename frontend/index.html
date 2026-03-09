@@ -618,8 +618,8 @@ input[type=checkbox]{width:auto;accent-color:var(--ku-dodger)}
 // Toggle USE_BACKEND to connect to the Node.js REST API.
 // When false, all data lives in memory (dummy seed).
 // ═══════════════════════════════════════════════════════════
-const USE_BACKEND   = false;           // ← set true to connect API
-const API_BASE      = 'http://localhost:3001/api';
+const USE_BACKEND   = true;            // ← connected to Railway + Supabase
+const API_BASE      = 'https://kidsunisite-production.up.railway.app/api';
 let   API_TOKEN     = '';              // set after login
 
 // ── Low-level fetch wrapper ──────────────────────────────────
