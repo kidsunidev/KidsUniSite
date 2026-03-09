@@ -627,7 +627,7 @@ let   API_TOKEN     = '';              // set after login
 async function apiFetch(method, path, body) {
   const headers = { 'Content-Type': 'application/json' };
   if (API_TOKEN) headers['Authorization'] = 'Bearer ' + API_TOKEN;
-  const opts = { method, headers };
+  const opts = { method, headers, signal: AbortSignal.timeout(10000) };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(API_BASE + path, opts);
   if (!r.ok) {
@@ -872,7 +872,8 @@ const DB = {
   // ── BOOTSTRAP: load all data from API ────────────────────
   async bootstrap() {
     toast('🔄 Loading from database…');
-    await Promise.all([
+    // Use allSettled so one failing endpoint can't block the whole UI
+    const results = await Promise.allSettled([
       DB.loadStudents(),
       DB.loadCourses(),
       DB.loadCredentials(),
@@ -880,7 +881,30 @@ const DB = {
       DB.loadForum(),
       DB.loadAnnouncements()
     ]);
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length === results.length) {
+      // All failed — fall back to demo mode
+      throw new Error('All API endpoints failed');
+    }
     renderAll();
+    function renderAll() {
+      safeRun('renderDashboard', renderDashboard);
+      safeRun('renderNotifications', renderNotifications);
+      safeRun('buildSkillsForm', buildSkillsForm);
+      safeRun('renderJourney', renderJourney);
+      safeRun('populateSelects', populateSelects);
+      safeRun('updateBadge', updateBadge);
+      safeRun('renderGradProfile', renderGradProfile);
+      safeRun('renderCourses', renderCourses);
+      safeRun('renderForum', renderForum);
+      safeRun('renderAnnouncements', renderAnnouncements);
+      safeRun('renderERA', renderERA);
+      safeRun('renderSkillMatrix', renderSkillMatrix);
+      safeRun('renderAnalytics', renderAnalytics);
+      safeRun('renderMessages', renderMessages);
+      safeRun('renderStudents', renderStudents);
+    }
+    const loaded = results.length - failed.length;
     updateDBStatus(true, 'Live DB ✓');
     toast('✅ Database loaded — ' + students.length + ' students');
   }
