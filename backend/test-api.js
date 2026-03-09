@@ -67,7 +67,9 @@ async function run() {
   {
     const r = await req('GET', '/students');
     if (r.status === 200 && Array.isArray(r.data.data) && r.data.data.length > 0) {
-      studentId = r.data.data[0].id;
+      // Pick student with skills (not first alphabetically)
+      const withSkills = r.data.data.find(s => s.skills && s.skills.length > 0) || r.data.data.find(s => s.name === "Rohan Sharma") || r.data.data[0];
+      studentId = withSkills.id;
       pass(`GET /students — ${r.data.data.length} students, first: ${r.data.data[0].name}`);
     } else {
       fail(`GET /students: ${JSON.stringify(r.data)}`);
