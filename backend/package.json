@@ -1,0 +1,25 @@
+{
+  "name": "kids-uni-backend",
+  "version": "4.0.0",
+  "description": "Kids University Mastery Platform - Backend API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node test-api.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.1",
+    "jsonwebtoken": "^9.0.3",
+    "nedb": "^1.8.0",
+    "sql.js": "^1.14.1",
+    "uuid": "^13.0.0"
+  }
+}
