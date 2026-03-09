@@ -619,6 +619,7 @@ input[type=checkbox]{width:auto;accent-color:var(--ku-dodger)}
 // When false, all data lives in memory (dummy seed).
 // ═══════════════════════════════════════════════════════════
 const USE_BACKEND   = true;            // ← connected to Railway + Supabase
+const API_TIMEOUT_MS = 8000;           // fallback to demo after 8s
 const API_BASE      = 'https://kidsunisite-production.up.railway.app/api';
 let   API_TOKEN     = '';              // set after login
 
@@ -2054,7 +2055,8 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   if(USE_BACKEND){
     // ── BACKEND MODE: auto-login then load all data from API ──
-    apiLogin('admin@kidsuni.edu','kidsuni2024')
+    const apiTimeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
+    Promise.race([apiLogin('admin@kidsuni.edu','kidsuni2024'), apiTimeout])
       .then(()=>DB.bootstrap())
       .catch(err=>{
         console.error('API connection failed:',err);
