@@ -1,79 +1,59 @@
-/**
- * Kids University — Mastery Platform v4.0
- * Backend API Server
- */
-
 require('dotenv').config();
-const express    = require('express');
-const cors       = require('cors');
-const path       = require('path');
+const express = require('express');
+const cors    = require('cors');
 const { initDB } = require('./db/database');
-
-const authRoutes       = require('./routes/auth');
-const studentRoutes    = require('./routes/students');
-const courseRoutes     = require('./routes/courses');
-const credentialRoutes = require('./routes/credentials');
-const evidenceRoutes   = require('./routes/evidence');
-const transcriptRoutes = require('./routes/transcripts');
-const analyticsRoutes  = require('./routes/analytics');
-const forumRoutes      = require('./routes/forum');
-const goalRoutes       = require('./routes/goals');
-const announcementRoutes = require('./routes/announcements');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Middleware ────────────────────────────────────────────────
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logger
+// ── Request logger ────────────────────────────────────────────
 app.use((req, _res, next) => {
-  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  console.log(`${new Date().toISOString().slice(11,19)} ${req.method} ${req.path}`);
   next();
 });
 
 // ── Routes ────────────────────────────────────────────────────
-app.use('/api/auth',          authRoutes);
-app.use('/api/students',      studentRoutes);
-app.use('/api/courses',       courseRoutes);
-app.use('/api/credentials',   credentialRoutes);
-app.use('/api/evidence',      evidenceRoutes);
-app.use('/api/transcripts',   transcriptRoutes);
-app.use('/api/analytics',     analyticsRoutes);
-app.use('/api/forum',         forumRoutes);
-app.use('/api/goals',         goalRoutes);
-app.use('/api/announcements', announcementRoutes);
+app.use('/api/auth',          require('./routes/auth'));
+app.use('/api/students',      require('./routes/students'));
+app.use('/api/courses',       require('./routes/courses'));
+app.use('/api/credentials',   require('./routes/credentials'));
+app.use('/api/evidence',      require('./routes/evidence'));
+app.use('/api/goals',         require('./routes/goals'));
+app.use('/api/transcripts',   require('./routes/transcripts'));
+app.use('/api/analytics',     require('./routes/analytics'));
+app.use('/api/forum',         require('./routes/forum'));
+app.use('/api/announcements', require('./routes/announcements'));
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', version: '4.0.0', timestamp: new Date().toISOString() });
-});
+// ── Health check ──────────────────────────────────────────────
+app.get('/health', (_req, res) => res.json({
+  status: 'ok',
+  version: '4.1.0',
+  database: 'supabase',
+  timestamp: new Date().toISOString()
+}));
 
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Route not found' });
-});
+// ── 404 handler ───────────────────────────────────────────────
+app.use((_req, res) => res.status(404).json({ success: false, error: 'Route not found' }));
 
-// Error handler
+// ── Error handler ─────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error', message: err.message });
+  res.status(500).json({ success: false, error: 'Internal server error' });
 });
 
 // ── Start ─────────────────────────────────────────────────────
 async function start() {
   await initDB();
   app.listen(PORT, () => {
-    console.log(`\n🎓 Kids Uni API Server running on http://localhost:${PORT}`);
-    console.log(`   Health: http://localhost:${PORT}/api/health\n`);
+    console.log(`🎓 Kids Uni API  →  http://localhost:${PORT}`);
+    console.log(`   Database      →  Supabase (${process.env.SUPABASE_URL})`);
+    console.log(`   Health check  →  http://localhost:${PORT}/health\n`);
   });
 }
 
-start().catch(err => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
-
-module.exports = app;
+start().catch(err => { console.error('Startup failed:', err); process.exit(1); });

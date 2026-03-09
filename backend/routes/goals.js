@@ -1,42 +1,39 @@
-const router = require('express').Router();
-const { db, p } = require('../db/database');
-const auth = require('../middleware/auth');
+const express = require('express');
+const router  = express.Router();
+const { db }  = require('../db/database');
+const { verifyToken } = require('../middleware/auth');
 
-router.get('/', auth, async (req, res) => {
+router.get('/:studentId', verifyToken, async (req, res) => {
   try {
-    const q = req.query.studentId ? { studentId: parseInt(req.query.studentId) } : {};
-    res.json(await p.find(db.goals, q, { createdAt: -1 }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const goals = await db.find('goals', { student_id: req.params.studentId }, { order: 'created_at', asc: false });
+    res.json({ success: true, data: goals });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { studentId, text, dueDate } = req.body;
-    if (!studentId || !text) return res.status(400).json({ error: 'studentId and text required' });
-    const goal = await p.insert(db.goals, {
-      studentId: parseInt(studentId), text,
-      done: false, dueDate: dueDate || null,
-      completedAt: null, createdAt: new Date(),
+    const goal = await db.insert('goals', req.body);
+    res.status(201).json({ success: true, data: goal });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+router.put('/:id/toggle', verifyToken, async (req, res) => {
+  try {
+    const goal = await db.findOne('goals', { id: req.params.id });
+    if (!goal) return res.status(404).json({ success: false, error: 'Goal not found' });
+    const updated = await db.update('goals', { id: req.params.id }, {
+      completed: !goal.completed,
+      completed_at: !goal.completed ? new Date().toISOString() : null
     });
-    res.status(201).json(goal);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.json({ success: true, data: updated });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.put('/:id/toggle', auth, async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    const goal = await p.findOne(db.goals, { _id: req.params.id });
-    if (!goal) return res.status(404).json({ error: 'Goal not found' });
-    const done = !goal.done;
-    await p.update(db.goals, { _id: req.params.id }, { $set: { done, completedAt: done ? new Date() : null } });
-    res.json(await p.findOne(db.goals, { _id: req.params.id }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    await p.remove(db.goals, { _id: req.params.id });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    await db.delete('goals', { id: req.params.id });
+    res.json({ success: true, message: 'Goal deleted' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

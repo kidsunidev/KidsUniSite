@@ -1,47 +1,56 @@
-// ── forum.js ──────────────────────────────────────────────────
-const forumRouter = require('express').Router();
-const { db, p }   = require('../db/database');
-const auth        = require('../middleware/auth');
+const express = require('express');
+const router  = express.Router();
+const { db }  = require('../db/database');
+const { verifyToken } = require('../middleware/auth');
 
-forumRouter.get('/', auth, async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
   try {
-    res.json(await p.find(db.forum, {}, { createdAt: -1 }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const posts = await db.find('forum', {}, { order: 'created_at', asc: false });
+    res.json({ success: true, data: posts });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-forumRouter.post('/', auth, async (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { title, body, tags } = req.body;
-    if (!title || !body) return res.status(400).json({ error: 'title and body required' });
-    const post = await p.insert(db.forum, {
-      authorId: req.user.id, authorName: req.user.name,
-      title, body, likes: 0, replies: [], tags: tags || [], createdAt: new Date(),
+    const post = await db.insert('forum', {
+      author_name: req.user.name,
+      author_role: req.user.role,
+      author_id:   req.user.id,
+      ...req.body
     });
-    res.status(201).json(post);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    res.status(201).json({ success: true, data: post });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-forumRouter.post('/:id/like', auth, async (req, res) => {
+router.post('/:id/like', verifyToken, async (req, res) => {
   try {
-    await p.update(db.forum, { _id: req.params.id }, { $inc: { likes: 1 } });
-    res.json(await p.findOne(db.forum, { _id: req.params.id }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const post = await db.findOne('forum', { id: req.params.id });
+    if (!post) return res.status(404).json({ success: false, error: 'Post not found' });
+    const updated = await db.update('forum', { id: req.params.id }, { likes: post.likes + 1 });
+    res.json({ success: true, data: updated });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-forumRouter.post('/:id/reply', auth, async (req, res) => {
+router.get('/:id/replies', verifyToken, async (req, res) => {
   try {
-    const { text } = req.body;
-    const reply = { author: req.user.name, text, createdAt: new Date() };
-    await p.update(db.forum, { _id: req.params.id }, { $push: { replies: reply } });
-    res.json(await p.findOne(db.forum, { _id: req.params.id }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const replies = await db.find('forum_replies', { post_id: req.params.id }, { order: 'created_at', asc: true });
+    res.json({ success: true, data: replies });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-forumRouter.delete('/:id', auth, async (req, res) => {
+router.post('/:id/replies', verifyToken, async (req, res) => {
   try {
-    await p.remove(db.forum, { _id: req.params.id });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const reply = await db.insert('forum_replies', {
+      post_id:     req.params.id,
+      author_id:   req.user.id,
+      author_name: req.user.name,
+      content:     req.body.content
+    });
+    // increment reply_count
+    const post = await db.findOne('forum', { id: req.params.id });
+    await db.update('forum', { id: req.params.id }, { reply_count: (post.reply_count || 0) + 1 });
+    res.status(201).json({ success: true, data: reply });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-module.exports = forumRouter;
+module.exports = router;

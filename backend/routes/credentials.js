@@ -1,56 +1,37 @@
-// ── credentials.js ───────────────────────────────────────────
-const credRouter = require('express').Router();
-const { db, p } = require('../db/database');
-const auth = require('../middleware/auth');
+const express = require('express');
+const router  = express.Router();
+const { db }  = require('../db/database');
+const { verifyToken, requireRole } = require('../middleware/auth');
 
-credRouter.get('/', auth, async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
   try {
-    const q = req.query.studentId ? { studentId: parseInt(req.query.studentId) } : {};
-    const creds = await p.find(db.credentials, q, { issuedAt: -1 });
-    res.json(creds);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const { student_id } = req.query;
+    const filters = student_id ? { student_id } : {};
+    const creds = await db.find('credentials', filters, { order: 'issued_at', asc: false });
+    res.json({ success: true, data: creds });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-credRouter.get('/:id', auth, async (req, res) => {
+router.post('/', verifyToken, requireRole(['admin','mentor']), async (req, res) => {
   try {
-    const cred = await p.findOne(db.credentials, { credentialId: req.params.id });
-    if (!cred) return res.status(404).json({ error: 'Credential not found' });
-    res.json(cred);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const cred = await db.insert('credentials', req.body);
+    res.status(201).json({ success: true, data: cred });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-credRouter.post('/', auth, async (req, res) => {
+router.put('/:id/revoke', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
-    const { studentId, type, name, skill, evidence } = req.body;
-    if (!studentId || !name) return res.status(400).json({ error: 'studentId and name required' });
-    const all = await p.find(db.credentials, {});
-    const credentialId = `cr${String(all.length + 1).padStart(3, '0')}`;
-    const cred = await p.insert(db.credentials, {
-      credentialId, studentId: parseInt(studentId),
-      type: type || 'Open Badge', name, skill: skill || '',
-      evidence: evidence || '', issuedAt: new Date(),
-      issuedBy: req.user.name,
-      verificationUrl: `https://kidsuni.edu/verify/${credentialId}`,
-      createdAt: new Date(),
-    });
-    res.status(201).json(cred);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const updated = await db.update('credentials', { id: req.params.id }, { is_revoked: true });
+    res.json({ success: true, data: updated });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-credRouter.delete('/:id', auth, async (req, res) => {
+router.get('/verify/:id', async (req, res) => {
   try {
-    await p.remove(db.credentials, { credentialId: req.params.id });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const cred = await db.findOne('credentials', { id: req.params.id });
+    if (!cred) return res.status(404).json({ success: false, error: 'Credential not found' });
+    res.json({ success: true, valid: !cred.is_revoked, data: cred });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-credRouter.get('/verify/:id', async (req, res) => {
-  try {
-    const cred = await p.findOne(db.credentials, { credentialId: req.params.id });
-    if (!cred) return res.status(404).json({ valid: false });
-    const student = await p.findOne(db.students, { studentId: cred.studentId });
-    res.json({ valid: true, credential: cred, student: student ? { name: student.name, grade: student.grade } : null });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-module.exports = credRouter;
+module.exports = router;

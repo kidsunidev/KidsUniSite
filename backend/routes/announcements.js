@@ -1,35 +1,31 @@
-const router = require('express').Router();
-const { db, p } = require('../db/database');
-const auth = require('../middleware/auth');
+const express = require('express');
+const router  = express.Router();
+const { db }  = require('../db/database');
+const { verifyToken, requireRole } = require('../middleware/auth');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
   try {
-    res.json(await p.find(db.announcements, {}, { pinned: -1, createdAt: -1 }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const items = await db.find('announcements', {}, { order: 'created_at', asc: false });
+    res.json({ success: true, data: items });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', verifyToken, requireRole(['admin','mentor']), async (req, res) => {
   try {
-    const { title, body, pinned } = req.body;
-    if (!title || !body) return res.status(400).json({ error: 'title and body required' });
-    const ann = await p.insert(db.announcements, { title, body, author: req.user.name, pinned: !!pinned, createdAt: new Date() });
-    res.status(201).json(ann);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const ann = await db.insert('announcements', {
+      author_id:   req.user.id,
+      author_name: req.user.name,
+      ...req.body
+    });
+    res.status(201).json({ success: true, data: ann });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.put('/:id', auth, async (req, res) => {
+router.delete('/:id', verifyToken, requireRole(['admin']), async (req, res) => {
   try {
-    const { title, body, pinned } = req.body;
-    await p.update(db.announcements, { _id: req.params.id }, { $set: { title, body, pinned: !!pinned, updatedAt: new Date() } });
-    res.json(await p.findOne(db.announcements, { _id: req.params.id }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    await p.remove(db.announcements, { _id: req.params.id });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    await db.delete('announcements', { id: req.params.id });
+    res.json({ success: true, message: 'Announcement deleted' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 module.exports = router;

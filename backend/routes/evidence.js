@@ -1,44 +1,29 @@
-const router = require('express').Router();
-const { db, p } = require('../db/database');
-const auth = require('../middleware/auth');
+const express = require('express');
+const router  = express.Router();
+const { db }  = require('../db/database');
+const { verifyToken } = require('../middleware/auth');
 
-router.get('/', auth, async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
   try {
-    const q = req.query.studentId ? { studentId: parseInt(req.query.studentId) } : {};
-    res.json(await p.find(db.evidence, q, { date: -1 }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const { student_id } = req.query;
+    const filters = student_id ? { student_id } : {};
+    const items = await db.find('evidence', filters, { order: 'created_at', asc: false });
+    res.json({ success: true, data: items });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.post('/', auth, async (req, res) => {
+router.post('/', verifyToken, async (req, res) => {
   try {
-    const { studentId, title, type, url, competency, proficiency, date } = req.body;
-    if (!studentId || !title) return res.status(400).json({ error: 'studentId and title required' });
-    const all = await p.find(db.evidence, {});
-    const evidenceId = `ev${String(all.length + 1).padStart(3, '0')}`;
-    const ev = await p.insert(db.evidence, {
-      evidenceId, studentId: parseInt(studentId), title,
-      type: type || 'Document', url: url || '', competency: competency || '',
-      proficiency: proficiency || 'Developing',
-      date: date || new Date().toISOString().split('T')[0],
-      uploadedBy: req.user.name, createdAt: new Date(),
-    });
-    res.status(201).json(ev);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    const item = await db.insert('evidence', req.body);
+    res.status(201).json({ success: true, data: item });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-router.put('/:id', auth, async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res) => {
   try {
-    const { title, type, url, competency, proficiency } = req.body;
-    await p.update(db.evidence, { evidenceId: req.params.id }, { $set: { title, type, url, competency, proficiency, updatedAt: new Date() } });
-    res.json(await p.findOne(db.evidence, { evidenceId: req.params.id }));
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.delete('/:id', auth, async (req, res) => {
-  try {
-    await p.remove(db.evidence, { evidenceId: req.params.id });
-    res.json({ deleted: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+    await db.delete('evidence', { id: req.params.id });
+    res.json({ success: true, message: 'Evidence deleted' });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 module.exports = router;
