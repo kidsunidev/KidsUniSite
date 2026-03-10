@@ -644,66 +644,96 @@ const apiDelete = (p)       => apiFetch('DELETE', p);
 // ── API login ────────────────────────────────────────────────
 async function apiLogin(email, password) {
   const data = await apiPost('/auth/login', { email, password });
-  API_TOKEN = data.token;
+  API_TOKEN = data.token || '';
   return data;
 }
 
 // ── Normalise API student → frontend shape ───────────────────
 function normStudent(s) {
-  // API returns { studentId, skills:{domain:{name:score}}, goals:[], … }
-  // Frontend expects { id, skills:{domain:{name:score}}, goals:[{text,done,due}], … }
+  const groupedSkills = Array.isArray(s.skills)
+    ? s.skills.reduce((acc, skill) => {
+        const domainKey = String(skill.domain || '').toLowerCase().split(' ')[0];
+        if (!acc[domainKey]) acc[domainKey] = {};
+        acc[domainKey][skill.skill_name || skill.skillName] = skill.score || 0;
+        return acc;
+      }, {})
+    : (s.skills || {});
+
   return {
-    id:           s.studentId || s.id,
+    id:           s.student_id || s.studentId || s.id,
     name:         s.name,
     age:          s.age || '—',
     grade:        s.grade || '—',
     era:          s.era || 'Exploration',
-    programStart: s.programStart || '',
-    programEnd:   s.programEnd   || '',
+    programStart: s.program_start || s.programStart || '',
+    programEnd:   s.program_end || s.programEnd || '',
     statement:    s.statement    || '',
-    skills:       s.skills       || {},
-    courses:      (s.enrollments || []).map(e => e.courseId || e.courseId),
+    skills:       groupedSkills,
+    courses:      (s.enrollments || []).map(e => e.course_id || e.courseId),
     achievements: (s.achievements|| []).map(a => a.title || a),
     goals:        (s.goals       || []).map(g => ({
-                    _id:  g._id,
+                    _id:  g.id || g._id,
                     text: g.text,
-                    done: g.done,
-                    due:  g.dueDate || g.due || ''
+                    done: !!(g.completed || g.done),
+                    due:  g.due_date || g.dueDate || g.due || ''
                   })),
-    mentor: s.mentor ? {
-      name:            s.mentor.mentorName    || s.mentor.name || '',
-      title:           s.mentor.mentorTitle   || s.mentor.title || '',
-      feedback:        s.mentor.feedback      || '',
-      recommendations: s.mentor.recommendations || ''
-    } : { name:'', title:'', feedback:'', recommendations:'' },
-    createdAt: s.programStart || ''
+    mentor: (() => {
+      const feedback = Array.isArray(s.feedback) ? s.feedback[0] : s.mentor;
+      return feedback ? {
+        name:            feedback.mentor_name || feedback.mentorName || feedback.name || '',
+        title:           feedback.mentor_title || feedback.mentorTitle || feedback.title || '',
+        feedback:        feedback.feedback || '',
+        recommendations: feedback.recommendations || ''
+      } : { name:'', title:'', feedback:'', recommendations:'' };
+    })(),
+    createdAt: s.program_start || s.programStart || ''
   };
+}
+
+function apiData(payload) {
+  if (payload && typeof payload === 'object' && 'data' in payload) return payload.data;
+  return payload;
+}
+
+function backendEnabled() {
+  return !!USE_BACKEND_RUNTIME;
 }
 
 // ── API-backed data operations ───────────────────────────────
 const DB = {
   // ── STUDENTS ──────────────────────────────────────────────
   async loadStudents() {
-    const data = await apiGet('/students');
-    students = (data.students || data).map(normStudent);
+    const data = apiData(await apiGet('/students'));
+    students = (data || []).map(normStudent);
     return students;
   },
   async createStudent(payload) {
-    const raw = await apiPost('/students', payload);
+    const raw = apiData(await apiPost('/students', {
+      name: payload.name,
+      age: payload.age,
+      grade: payload.grade,
+      era: payload.era,
+      program_start: payload.programStart,
+      program_end: payload.programEnd
+    }));
+    const studentId = raw.id;
     // Also save skills via dedicated endpoint
     if (payload.skills) {
+      const skillRows = [];
       for (const [domain, domSkills] of Object.entries(payload.skills)) {
         for (const [skillName, score] of Object.entries(domSkills)) {
-          await apiPost(`/students/${raw.studentId}/skills`,
-                        { domain, skillName, score }).catch(() => {});
+          skillRows.push({ domain, skill_name: skillName, score });
         }
+      }
+      if (skillRows.length) {
+        await apiPut(`/students/${studentId}/skills`, { skills: skillRows }).catch(() => {});
       }
     }
     // Save mentor feedback
     if (payload.mentor && payload.mentor.name) {
-      await apiPut(`/students/${raw.studentId}/mentor`, {
-        mentorName:      payload.mentor.name,
-        mentorTitle:     payload.mentor.title,
+      await apiPost(`/students/${studentId}/feedback`, {
+        mentor_name:     payload.mentor.name,
+        mentor_title:    payload.mentor.title,
         feedback:        payload.mentor.feedback,
         recommendations: payload.mentor.recommendations
       }).catch(() => {});
@@ -711,18 +741,18 @@ const DB = {
     // Save achievements
     if (payload.achievements && payload.achievements.length) {
       for (const title of payload.achievements) {
-        await apiPost(`/students/${raw.studentId}/achievements`,
-                      { title, category: 'Badge' }).catch(() => {});
+        await apiPost(`/students/${studentId}/achievements`,
+                      { title: title.title || title, category: title.cat || 'Badge', description: title.desc || '' }).catch(() => {});
       }
     }
     // Enrol in courses
     if (payload.courses && payload.courses.length) {
       for (const courseId of payload.courses) {
         await apiPost(`/courses/${courseId}/enroll`,
-                      { studentId: raw.studentId }).catch(() => {});
+                      { student_id: studentId }).catch(() => {});
       }
     }
-    return raw.studentId;
+    return studentId;
   },
   async deleteStudent(id) {
     await apiDelete(`/students/${id}`);
@@ -731,10 +761,10 @@ const DB = {
 
   // ── COURSES ───────────────────────────────────────────────
   async loadCourses() {
-    const data = await apiGet('/courses');
+    const data = apiData(await apiGet('/courses'));
     courses = (data || []).map(c => ({
-      id: c.courseId, title: c.title, cat: c.category,
-      dur: c.duration, desc: c.description,
+      id: c.id || c.courseId, title: c.title, cat: c.category || c.cat,
+      dur: c.duration || c.dur, desc: c.description || c.desc,
       color: c.color, ico: c.icon, credits: c.credits
     }));
     return courses;
@@ -749,33 +779,33 @@ const DB = {
       color:       payload.color || '#00c9a7',
       icon:        payload.ico || '📚'
     });
-    return raw.courseId;
+    return (apiData(raw) || {}).id;
   },
 
   // ── CREDENTIALS ───────────────────────────────────────────
   async loadCredentials() {
-    const data = await apiGet('/credentials');
+    const data = apiData(await apiGet('/credentials'));
     credentials = (data || []).map(cr => ({
-      id:        cr.credentialId,
-      studentId: cr.studentId,
+      id:        cr.id || cr.credentialId,
+      studentId: cr.student_id || cr.studentId,
       type:      cr.type,
       name:      cr.name,
       skill:     cr.skill,
       evidence:  cr.evidence || '',
-      date:      cr.issuedAt ? new Date(cr.issuedAt).toLocaleDateString('en-GB') : ''
+      date:      (cr.issued_at || cr.issuedAt) ? new Date(cr.issued_at || cr.issuedAt).toLocaleDateString('en-GB') : ''
     }));
     return credentials;
   },
   async createCredential(payload) {
-    const raw = await apiPost('/credentials', {
-      studentId: payload.studentId,
+    const raw = apiData(await apiPost('/credentials', {
+      student_id: payload.studentId,
       type:      payload.type,
       name:      payload.name,
       skill:     payload.skill,
       evidence:  payload.evidence
-    });
+    }));
     credentials.push({
-      id: raw.credentialId, studentId: payload.studentId,
+      id: raw.id || raw.credentialId, studentId: payload.studentId,
       type: payload.type, name: payload.name,
       skill: payload.skill, evidence: payload.evidence || '',
       date: new Date().toLocaleDateString('en-GB')
@@ -784,10 +814,10 @@ const DB = {
 
   // ── EVIDENCE ──────────────────────────────────────────────
   async loadEvidence() {
-    const data = await apiGet('/evidence');
+    const data = apiData(await apiGet('/evidence'));
     evidenceStore = (data || []).map(ev => ({
-      id:          ev.evidenceId,
-      studentId:   ev.studentId,
+      id:          ev.id || ev.evidenceId,
+      studentId:   ev.student_id || ev.studentId,
       title:       ev.title,
       type:        ev.type,
       url:         ev.url || '',
@@ -798,9 +828,16 @@ const DB = {
     return evidenceStore;
   },
   async createEvidence(payload) {
-    const raw = await apiPost('/evidence', payload);
+    const raw = apiData(await apiPost('/evidence', {
+      student_id: payload.studentId,
+      title: payload.title,
+      type: payload.type,
+      url: payload.url || '',
+      competency: payload.competency || '',
+      proficiency: payload.proficiency || 'Developing'
+    }));
     evidenceStore.push({
-      id: raw.evidenceId, studentId: payload.studentId,
+      id: raw.id || raw.evidenceId, studentId: payload.studentId,
       title: payload.title, type: payload.type,
       url: payload.url || '', competency: payload.competency || '',
       proficiency: payload.proficiency || 'Developing',
@@ -810,11 +847,11 @@ const DB = {
 
   // ── GOALS ────────────────────────────────────────────────
   async createGoal(studentId, text, dueDate) {
-    const raw = await apiPost('/goals', { studentId, text, dueDate: dueDate || null });
+    const raw = apiData(await apiPost('/goals', { student_id: studentId, text, due_date: dueDate || null }));
     const s = students.find(st => st.id === studentId);
     if (s) {
       if (!s.goals) s.goals = [];
-      s.goals.push({ _id: raw._id, text, done: false, due: dueDate || '' });
+      s.goals.push({ _id: raw.id || raw._id, text, done: false, due: dueDate || '' });
     }
     return raw;
   },
@@ -837,36 +874,36 @@ const DB = {
 
   // ── FORUM ────────────────────────────────────────────────
   async loadForum() {
-    const data = await apiGet('/forum');
+    const data = apiData(await apiGet('/forum'));
     forumPosts = (data || []).map(p => ({
-      id: p._id, author: p.authorName, role: 'mentor',
-      ico: '👤', text: p.body, cat: (p.tags || [])[0] || 'General',
-      likes: p.likes || 0, replies: (p.replies || []).length,
-      time: p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB') : 'recently'
+      id: p.id || p._id, author: p.author_name || p.authorName || 'Unknown', role: p.author_role || 'mentor',
+      ico: '👤', text: p.body || p.content || '', cat: (p.tags || [])[0] || p.category || 'General',
+      likes: p.likes || 0, replies: p.reply_count || (p.replies || []).length || 0,
+      time: (p.created_at || p.createdAt) ? new Date(p.created_at || p.createdAt).toLocaleDateString('en-GB') : 'recently'
     }));
     return forumPosts;
   },
   async createPost(text, cat) {
-    const raw = await apiPost('/forum', { title: text.slice(0, 60), body: text, tags: [cat] });
+    const raw = apiData(await apiPost('/forum', { title: text.slice(0, 60), content: text, category: cat }));
     forumPosts.unshift({
-      id: raw._id, author: 'You', role: currentRole,
+      id: raw.id || raw._id, author: 'You', role: currentRole,
       ico: '👤', text, cat, likes: 0, replies: 0, time: 'just now'
     });
   },
 
   // ── ANNOUNCEMENTS ────────────────────────────────────────
   async loadAnnouncements() {
-    const data = await apiGet('/announcements');
+    const data = apiData(await apiGet('/announcements'));
     announcements = (data || []).map(a => ({
-      id: a._id, title: a.title, body: a.body,
-      type: a.pinned ? 'pinned' : 'info',
-      time: a.createdAt ? new Date(a.createdAt).toLocaleDateString('en-GB') : 'recently'
+      id: a.id || a._id, title: a.title, body: a.content || a.body,
+      type: a.is_pinned || a.pinned ? 'pinned' : 'info',
+      time: (a.created_at || a.createdAt) ? new Date(a.created_at || a.createdAt).toLocaleDateString('en-GB') : 'recently'
     }));
     return announcements;
   },
   async createAnnouncement(title, body, type) {
-    const raw = await apiPost('/announcements', { title, body, pinned: type === 'pinned' });
-    announcements.unshift({ id: raw._id, title, body, type, time: 'just now' });
+    const raw = apiData(await apiPost('/announcements', { title, content: body, is_pinned: type === 'pinned' }));
+    announcements.unshift({ id: raw.id || raw._id, title, body, type, time: 'just now' });
   },
 
   // ── BOOTSTRAP: load all data from API ────────────────────
@@ -1121,7 +1158,7 @@ let announcements= [...ANN_SEED];
 let forumPosts   = [...FORUM_SEED];
 
 function save(){
-  if(USE_BACKEND) return; // API handles persistence
+  if(backendEnabled()) return; // API handles persistence
   try{localStorage.setItem('ku4-students',JSON.stringify(students));}catch(e){}
   try{localStorage.setItem('ku4-courses',JSON.stringify(courses));}catch(e){}
   try{localStorage.setItem('ku4-creds',JSON.stringify(credentials));}catch(e){}
@@ -1250,7 +1287,7 @@ function renderStudents(q=''){
 function filterStudents(){renderStudents(document.getElementById('gsearch')?.value||'');}
 function delStu(id){
   if(!confirm('Delete this student?'))return;
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.deleteStudent(id).then(()=>{renderStudents();renderDashboard();updateBadge();populateSelects();toast('🗑️ Student removed');}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1303,7 +1340,7 @@ function saveStudent(){
     skills,courses:enrolled,achievements:[...tempAchs],
     mentor:{name:document.getElementById('mn').value,title:document.getElementById('mt2').value,feedback:document.getElementById('mf').value,recommendations:document.getElementById('mr').value}
   };
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createStudent(payload).then(newId=>{
       return DB.loadStudents();
     }).then(()=>{
@@ -1662,7 +1699,7 @@ function saveCredential(){
   const name=document.getElementById('cr-name').value.trim();
   if(!sid||!name){toast('Please fill all required fields');return;}
   const payload={studentId:sid,type:document.getElementById('cr-type').value,name,skill:document.getElementById('cr-skill').value,evidence:document.getElementById('cr-ev').value,date:new Date().toLocaleDateString('en-GB')};
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createCredential(payload).then(()=>{save();closeMo('mo-cred');toast('✅ Credential issued!');updateBadge();loadWalletFor(sid);}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1707,7 +1744,7 @@ function saveEvidence(){
   const title=document.getElementById('eve-title').value.trim();
   if(!sid||!title){toast('Please fill all required fields');return;}
   const payload={studentId:sid,title,type:document.getElementById('eve-type').value,url:document.getElementById('eve-url').value,competency:document.getElementById('eve-comp').value,proficiency:document.getElementById('eve-prof').value,date:new Date().toLocaleDateString('en-GB')};
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createEvidence(payload).then(()=>{closeMo('mo-evidence');toast('✅ Evidence uploaded!');loadEvidenceVault();}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1731,7 +1768,7 @@ function renderCourses(){
 function saveCourse(){
   const title=document.getElementById('ct').value.trim();if(!title)return;
   const payload={title,cat:document.getElementById('cc2').value,dur:parseInt(document.getElementById('cdur').value)||8,desc:document.getElementById('cdesc').value,credits:parseInt(document.getElementById('ccred').value)||3,color:'#00c9a7',ico:document.getElementById('cico').value||'📚'};
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createCourse(payload).then(()=>DB.loadCourses()).then(()=>{closeMo('mo-course');renderCourses();populateSelects();toast('✅ Course added!');}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1776,7 +1813,7 @@ function loadPortfolio(){
   </div>`;
 }
 function toggleGoal(sid,gi){
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.toggleGoal(sid,gi).then(()=>loadPortfolio()).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1816,14 +1853,14 @@ function loadGoals(){
   </div>`;
 }
 function tg2(sid,gi){
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.toggleGoal(sid,gi).then(()=>loadGoals()).catch(e=>toast('❌ '+e.message));
     return;
   }
   const s=students.find(st=>st.id===sid);if(s?.goals?.[gi]){s.goals[gi].done=!s.goals[gi].done;save();loadGoals();}
 }
 function dg(sid,gi){
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.deleteGoal(sid,gi).then(()=>loadGoals()).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1832,7 +1869,7 @@ function dg(sid,gi){
 function addGoal(sid){
   const txt=document.getElementById('new-goal-txt').value.trim();if(!txt)return;
   const due=document.getElementById('new-goal-due').value;
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createGoal(sid,txt,due).then(()=>{loadGoals();toast('✅ Goal added!');}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -1900,7 +1937,7 @@ function renderForum(){
 function postForum(){
   const txt=document.getElementById('forum-post').value.trim();if(!txt)return;
   const cat=document.getElementById('forum-cat').value;
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createPost(txt,cat).then(()=>{document.getElementById('forum-post').value='';renderForum();toast('✅ Post published!');}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -2014,7 +2051,7 @@ function postAnn(){
   const t=document.getElementById('ann-t').value.trim();if(!t)return;
   const body=document.getElementById('ann-b').value;
   const type=document.getElementById('ann-type').value;
-  if(USE_BACKEND){
+  if(backendEnabled()){
     DB.createAnnouncement(t,body,type).then(()=>{document.getElementById('ann-t').value='';document.getElementById('ann-b').value='';renderAnnouncements();toast('📢 Announcement posted!');}).catch(e=>toast('❌ '+e.message));
     return;
   }
@@ -2059,7 +2096,7 @@ document.addEventListener('DOMContentLoaded',()=>{
 
   const safeRun=(name,fn)=>{try{fn();}catch(e){console.error(name+' failed:',e);}};
 
-  if(USE_BACKEND){
+  if(backendEnabled()){
     // ── BACKEND MODE: auto-login then load all data from API ──
     const apiTimeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
     Promise.race([apiLogin('admin@kidsuni.edu','kidsuni2024'), apiTimeout])
