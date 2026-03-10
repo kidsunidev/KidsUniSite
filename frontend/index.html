@@ -708,6 +708,10 @@ function backendEnabled() {
   return true;
 }
 
+function safeRun(name, fn) {
+  try { fn(); } catch (e) { console.error(name + ' failed:', e); }
+}
+
 // ── API-backed data operations ───────────────────────────────
 const DB = {
   // ── STUDENTS ──────────────────────────────────────────────
@@ -2081,8 +2085,6 @@ function openStuModal(id){
 // INIT
 document.addEventListener('DOMContentLoaded',()=>{
   // Pages are controlled by .ku-active class (set in HTML on page-dashboard)
-
-  const safeRun=(name,fn)=>{try{fn();}catch(e){console.error(name+' failed:',e);}};
   safeRun('renderDashboard',renderDashboard);
   safeRun('renderNotifications',renderNotifications);
   safeRun('buildSkillsForm',buildSkillsForm);
