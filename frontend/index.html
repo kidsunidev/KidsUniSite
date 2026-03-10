@@ -1172,6 +1172,8 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 function openMo(id){document.getElementById(id).classList.add('open');populateSelects();}
 function closeMo(id){document.getElementById(id).classList.remove('open');}
 function copyLink(){navigator.clipboard?.writeText(document.getElementById('share-link').value);toast('🔗 Secure link copied!');}
+function studentKey(v){return v == null ? '' : String(v);}
+function findStudentById(id){const key=studentKey(id);return students.find(st=>studentKey(st.id)===key);}
 
 function populateSelects(){
   const opts='<option value="">— Select Student —</option>'+students.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
@@ -1233,7 +1235,7 @@ function renderDashboard(){
   if(!students.length){rEl.innerHTML='<div class="empty-state"><span class="empty-ico">👨‍🎓</span><div class="empty-title">No students yet</div><div class="empty-sub">Enrol your first student to get started</div></div>';
   }else{
     rEl.innerHTML=`<table class="tbl"><thead><tr><th>Student</th><th>Level</th><th>Score</th><th>ERA</th></tr></thead><tbody>
-      ${[...students].reverse().slice(0,6).map((s,i)=>{const sc=ovr(s),l=lv(sc);return`<tr style="cursor:pointer" onclick="openStuModal(${s.id})"><td><div class="nc"><div class="av ${avCls(i)}">${ini(s.name)}</div>${s.name}</div></td><td><span class="badge ${lvCls(l)}">${l}</span></td><td><strong>${sc}</strong></td><td class="txt-m" style="font-size:10.5px">${s.era}</td></tr>`;}).join('')}
+      ${[...students].reverse().slice(0,6).map((s,i)=>{const sc=ovr(s),l=lv(sc);return`<tr style="cursor:pointer" onclick='openStuModal(${JSON.stringify(String(s.id))})'><td><div class="nc"><div class="av ${avCls(i)}">${ini(s.name)}</div>${s.name}</div></td><td><span class="badge ${lvCls(l)}">${l}</span></td><td><strong>${sc}</strong></td><td class="txt-m" style="font-size:10.5px">${s.era}</td></tr>`;}).join('')}
     </tbody></table>`;
   }
   const stages={Exploration:0,Reinforcement:0,Application:0};
@@ -1269,10 +1271,10 @@ function renderStudents(q=''){
     <td class="txt-m" style="font-size:10.5px">${s.era}</td>
     <td class="txt-m">${(s.courses||[]).length}</td>
     <td><div class="flex" style="gap:4px">
-      <button class="btn btn-g btn-sm" onclick="openStuModal(${s.id})">View</button>
-      <button class="btn btn-g btn-sm" onclick="viewTr(${s.id})">📋</button>
-      <button class="btn btn-g btn-sm" onclick="loadWalletFor(${s.id})">💳</button>
-      <button class="btn btn-d btn-sm" onclick="delStu(${s.id})">🗑</button>
+      <button class="btn btn-g btn-sm" onclick='openStuModal(${JSON.stringify(String(s.id))})'>View</button>
+      <button class="btn btn-g btn-sm" onclick='viewTr(${JSON.stringify(String(s.id))})'>📋</button>
+      <button class="btn btn-g btn-sm" onclick='loadWalletFor(${JSON.stringify(String(s.id))})'>💳</button>
+      <button class="btn btn-d btn-sm" onclick='delStu(${JSON.stringify(String(s.id))})'>🗑</button>
     </div></td>
   </tr>`;}).join('');
 }
@@ -1356,8 +1358,8 @@ function saveStudent(){
 // TRANSCRIPT
 function viewTr(id){go('transcript');setTimeout(()=>{document.getElementById('tr-sel').value=id;loadTranscript();},60);}
 function loadTranscript(){
-  const id=parseInt(document.getElementById('tr-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('tr-sel').value);
+  const s=findStudentById(id);
   const c=document.getElementById('tr-content');
   if(!s){c.innerHTML='<div class="empty-state"><span class="empty-ico">📋</span><div class="empty-title">Select a student above</div></div>';return;}
   const sc=ovr(s),l=lv(sc),icons={Competition:'🏆',Project:'🚀',Certification:'📜',Badge:'🏅',Other:'⭐'};
@@ -1398,13 +1400,13 @@ function loadTranscript(){
   <div style="text-align:center;padding:14px;color:rgba(0,0,0,0.25);font-size:10.5px;border-top:1px solid var(--border);margin-top:6px">Issued by Kids University · ERA Skill-Based Transcript · OECD Learning Compass 2030 aligned · CLR v2.0 Certified</div>
   <div class="flex" style="gap:7px;margin-top:13px">
     <button class="btn btn-gold" onclick="shareTranscript()">🔗 Secure Share</button>
-    <button class="btn btn-purple" onclick="go('learning-record');setTimeout(()=>{document.getElementById('mlr-sel').value=${s.id};loadMLR();},60)">📄 View MLR</button>
+    <button class="btn btn-purple" onclick='go("learning-record");setTimeout(()=>{document.getElementById("mlr-sel").value=${JSON.stringify(String(s.id))};loadMLR();},60)'>📄 View MLR</button>
     <button class="btn btn-g" onclick="window.print()">🖨️ Print</button>
   </div>`;
 }
 function shareTranscript(){
-  const id=parseInt(document.getElementById('tr-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('tr-sel').value);
+  const s=findStudentById(id);
   if(!s){toast('Select a student first');return;}
   document.getElementById('share-opts').innerHTML=`
     <div class="share-opt"><div class="share-ico" style="background:rgba(30,150,255,0.08)">🔗</div><div><div style="font-size:12.5px;font-weight:700">Secure Viewer Link</div><div class="txt-m" style="font-size:11px">Time-limited link for universities to view the transcript</div></div></div>
@@ -1417,8 +1419,8 @@ function shareTranscript(){
 
 // MLR
 function loadMLR(){
-  const id=parseInt(document.getElementById('mlr-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('mlr-sel').value);
+  const s=findStudentById(id);
   const c=document.getElementById('mlr-content');
   if(!s){c.innerHTML='<div class="empty-state"><span class="empty-ico">📄</span><div class="empty-title">Select a student</div></div>';return;}
   const sc=ovr(s),l=lv(sc);
@@ -1465,7 +1467,7 @@ function loadMLR(){
         <div class="st">💳 Credentials &amp; Badges</div>
         ${sCreds.length?sCreds.map(cr=>`<div class="ev-item"><div class="ev-ico" style="background:rgba(157,99,218,0.1)">🏅</div><div style="flex:1"><div style="font-size:12px;font-weight:700">${cr.name}</div><div class="txt-m" style="font-size:10.5px">${cr.type} · ${cr.skill}</div></div><span class="vbadge" style="font-size:8px">✓ Verified</span></div>`).join('')
         :'<div class="txt-m" style="padding:10px 0;font-size:11.5px">No credentials yet</div>'}
-        <button class="btn btn-p btn-sm" style="margin-top:9px" onclick="go('credential-wallet');setTimeout(()=>{document.getElementById('wlt-sel').value=${s.id};loadWallet();},60)">+ Issue Credential</button>
+        <button class="btn btn-p btn-sm" style="margin-top:9px" onclick='go("credential-wallet");setTimeout(()=>{document.getElementById("wlt-sel").value=${JSON.stringify(String(s.id))};loadWallet();},60)'>+ Issue Credential</button>
       </div>
       <div class="card">
         <div class="st">🗃️ Evidence Linked</div>
@@ -1477,7 +1479,7 @@ function loadMLR(){
   <div class="flex" style="gap:7px">
     <button class="btn btn-p" onclick="exportCLR()">📥 Export CLR JSON-LD</button>
     <button class="btn btn-gold" onclick="shareMLR()">🔗 Share MLR</button>
-    <button class="btn btn-g" onclick="viewTr(${s.id})">📋 View Transcript</button>
+    <button class="btn btn-g" onclick='viewTr(${JSON.stringify(String(s.id))})'>📋 View Transcript</button>
   </div>`;
 }
 function exportCLR(){toast('📥 CLR JSON-LD file generated — downloads in production');}
@@ -1498,7 +1500,7 @@ function renderGradProfile(){
   el.innerHTML=`<table class="tbl"><thead><tr><th>Student</th><th>🧠 Cognitive</th><th>⚙️ Practical</th><th>💻 Technical</th><th>🤝 Social</th><th>🌍 Global</th><th>Overall</th></tr></thead><tbody>
   ${students.map((s,i)=>{const sc=ovr(s);
     const mkBar=(did,col)=>{const a=domAvg(s,did);return`<div style="display:flex;align-items:center;gap:5px"><div class="sb-track" style="width:58px"><div class="sb-fill sf-${col}" style="width:${a}%"></div></div><span style="font-size:9.5px;font-weight:700;color:var(--text-muted)">${a}</span></div>`;};
-    return`<tr style="cursor:pointer" onclick="openStuModal(${s.id})">
+    return`<tr style="cursor:pointer" onclick='openStuModal(${JSON.stringify(String(s.id))})'>
       <td><div class="nc"><div class="av ${avCls(i)}">${ini(s.name)}</div>${s.name}</div></td>
       <td>${mkBar('cognitive','t')}</td><td>${mkBar('practical','c')}</td><td>${mkBar('technical','t')}</td>
       <td>${mkBar('social','s')}</td><td>${mkBar('global','g')}</td>
@@ -1509,8 +1511,8 @@ function renderGradProfile(){
 
 // COMPETENCY WHEEL
 function loadWheel(){
-  const id=parseInt(document.getElementById('cw-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('cw-sel').value);
+  const s=findStudentById(id);
   const c=document.getElementById('cw-content');
   if(!s){c.innerHTML='<div class="empty-state"><span class="empty-ico">🎯</span><div class="empty-title">Select a student</div></div>';return;}
   const sc=ovr(s);
@@ -1582,8 +1584,8 @@ function loadWheel(){
 
 // PROGRESS TRACKER
 function loadProgressTracker(){
-  const id=parseInt(document.getElementById('pt-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('pt-sel').value);
+  const s=findStudentById(id);
   const c=document.getElementById('pt-content');
   if(!s){c.innerHTML='<div class="empty-state"><span class="empty-ico">📈</span><div class="empty-title">Select a student</div></div>';return;}
   const sEv=evidenceStore.filter(ev=>ev.studentId===s.id);
@@ -1626,7 +1628,7 @@ function loadProgressTracker(){
 
 // CREDENTIAL WALLET
 function loadWallet(){
-  const id=parseInt(document.getElementById('wlt-sel').value);
+  const id=studentKey(document.getElementById('wlt-sel').value);
   if(id)loadWalletFor(id);
   else document.getElementById('wallet-content').innerHTML='<div class="empty-state"><span class="empty-ico">💳</span><div class="empty-title">Select a student</div></div>';
 }
@@ -1634,7 +1636,7 @@ function loadWalletFor(sid){
   go('credential-wallet');
   setTimeout(()=>{
     document.getElementById('wlt-sel').value=sid;
-    const s=students.find(st=>st.id===sid);
+    const s=findStudentById(sid);
     if(!s)return;
     const c=document.getElementById('wallet-content');
     const sCreds=credentials.filter(cr=>cr.studentId===s.id);
@@ -1687,22 +1689,22 @@ function loadWalletFor(sid){
   },60);
 }
 function saveCredential(){
-  const sid=parseInt(document.getElementById('cr-stu').value);
+  const studentId=studentKey(document.getElementById('cr-stu').value);
   const name=document.getElementById('cr-name').value.trim();
-  if(!sid||!name){toast('Please fill all required fields');return;}
-  const payload={studentId:sid,type:document.getElementById('cr-type').value,name,skill:document.getElementById('cr-skill').value,evidence:document.getElementById('cr-ev').value,date:new Date().toLocaleDateString('en-GB')};
+  if(!studentId||!name){toast('Please fill all required fields');return;}
+  const payload={studentId:studentId,type:document.getElementById('cr-type').value,name,skill:document.getElementById('cr-skill').value,evidence:document.getElementById('cr-ev').value,date:new Date().toLocaleDateString('en-GB')};
   if(backendEnabled()){
-    DB.createCredential(payload).then(()=>{save();closeMo('mo-cred');toast('✅ Credential issued!');updateBadge();loadWalletFor(sid);}).catch(e=>toast('❌ '+e.message));
+    DB.createCredential(payload).then(()=>{save();closeMo('mo-cred');toast('✅ Credential issued!');updateBadge();loadWalletFor(studentId);}).catch(e=>toast('❌ '+e.message));
     return;
   }
   credentials.push({id:uid(),...payload});
-  save();closeMo('mo-cred');toast('✅ Credential issued!');updateBadge();loadWalletFor(sid);
+  save();closeMo('mo-cred');toast('✅ Credential issued!');updateBadge();loadWalletFor(studentId);
 }
 
 // EVIDENCE VAULT
 function loadEvidenceVault(){
-  const id=parseInt(document.getElementById('ev-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('ev-sel').value);
+  const s=findStudentById(id);
   const c=document.getElementById('ev-content');
   if(!s){c.innerHTML='<div class="empty-state"><span class="empty-ico">🗃️</span><div class="empty-title">Select a student</div></div>';return;}
   const sEv=evidenceStore.filter(ev=>ev.studentId===s.id);
@@ -1717,7 +1719,7 @@ function loadEvidenceVault(){
         <span class="badge ${ev.proficiency==='Mastery'?'ba':ev.proficiency==='Proficient'?'bi':'bb'}" style="font-size:8px">${ev.proficiency}</span>
       </div>`).join('')
       :'<div class="empty-state" style="padding:28px"><span class="empty-ico" style="font-size:32px">🗃️</span><div class="empty-title" style="font-size:13.5px">No evidence yet</div><div class="empty-sub">Upload evidence to substantiate mastery claims</div></div>'}
-      <button class="btn btn-p btn-sm" style="margin-top:11px" onclick="openMo('mo-evidence');document.getElementById('eve-stu').value=${s.id}">+ Upload Evidence</button>
+      <button class="btn btn-p btn-sm" style="margin-top:11px" onclick='openMo("mo-evidence");document.getElementById("eve-stu").value=${JSON.stringify(String(s.id))}'>+ Upload Evidence</button>
     </div>
     <div>
       <div class="card mb4" style="margin-bottom:13px">
@@ -1732,7 +1734,7 @@ function loadEvidenceVault(){
   </div>`;
 }
 function saveEvidence(){
-  const sid=parseInt(document.getElementById('eve-stu').value);
+  const sid=studentKey(document.getElementById('eve-stu').value);
   const title=document.getElementById('eve-title').value.trim();
   if(!sid||!title){toast('Please fill all required fields');return;}
   const payload={studentId:sid,title,type:document.getElementById('eve-type').value,url:document.getElementById('eve-url').value,competency:document.getElementById('eve-comp').value,proficiency:document.getElementById('eve-prof').value,date:new Date().toLocaleDateString('en-GB')};
@@ -1770,8 +1772,8 @@ function saveCourse(){
 
 // PORTFOLIO
 function loadPortfolio(){
-  const id=parseInt(document.getElementById('port-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('port-sel').value);
+  const s=findStudentById(id);
   const el=document.getElementById('portfolio-content');
   if(!s){el.innerHTML='<div class="empty-state"><span class="empty-ico">🗂</span><div class="empty-title">Select a student</div></div>';return;}
   const sCourses=(s.courses||[]).map(cid=>courses.find(c=>c.id===cid)).filter(Boolean);
@@ -1794,7 +1796,7 @@ function loadPortfolio(){
     </div>
     <div class="card"><div class="st">🎯 Learning Goals</div>
       ${(s.goals||[]).map((g,i)=>`<div style="display:flex;align-items:center;gap:7px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <input type="checkbox" ${g.done?'checked':''} onclick="toggleGoal(${s.id},${i})" style="accent-color:var(--ku-dodger)">
+        <input type="checkbox" ${g.done?'checked':''} onclick='toggleGoal(${JSON.stringify(String(s.id))},${i})' style="accent-color:var(--ku-dodger)">
         <span style="font-size:12.5px;${g.done?'text-decoration:line-through;opacity:.5':''}">${g.text}</span>
       </div>`).join('')||'<div class="txt-m" style="padding:11px 0">No goals set</div>'}
     </div>
@@ -1814,8 +1816,8 @@ function toggleGoal(sid,gi){
 
 // GOALS
 function loadGoals(){
-  const id=parseInt(document.getElementById('goal-sel').value);
-  const s=students.find(st=>st.id===id);
+  const id=studentKey(document.getElementById('goal-sel').value);
+  const s=findStudentById(id);
   const el=document.getElementById('goals-content');
   if(!s){el.innerHTML='<div class="empty-state"><span class="empty-ico">🎯</span><div class="empty-title">Select a student</div></div>';return;}
   const done=(s.goals||[]).filter(g=>g.done).length,total=(s.goals||[]).length,pct=total?Math.round((done/total)*100):0;
@@ -1823,14 +1825,14 @@ function loadGoals(){
     <div class="card">
       <div class="st">📌 Current Goals</div>
       <div>${(s.goals||[]).map((g,i)=>`<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <input type="checkbox" ${g.done?'checked':''} onclick="tg2(${s.id},${i})" style="accent-color:var(--ku-dodger)">
+        <input type="checkbox" ${g.done?'checked':''} onclick='tg2(${JSON.stringify(String(s.id))},${i})' style="accent-color:var(--ku-dodger)">
         <div style="flex:1"><div style="font-size:12.5px;${g.done?'text-decoration:line-through;opacity:.5':''}">${g.text}</div>${g.due?`<div class="txt-m" style="font-size:10.5px">Due: ${g.due}</div>`:''}</div>
-        <span onclick="dg(${s.id},${i})" style="cursor:pointer;color:var(--text-muted);font-size:12px">✕</span>
+        <span onclick='dg(${JSON.stringify(String(s.id))},${i})' style="cursor:pointer;color:var(--text-muted);font-size:12px">✕</span>
       </div>`).join('')||'<div class="txt-m" style="padding:10px 0">No goals yet</div>'}</div>
       <div style="margin-top:13px;padding-top:13px;border-top:1px solid var(--border)">
         <div class="fg"><label>New Goal</label><input id="new-goal-txt" placeholder="e.g. Earn Python certification"></div>
         <div class="fg"><label>Due Date</label><input type="date" id="new-goal-due"></div>
-        <button class="btn btn-p btn-sm" onclick="addGoal(${s.id})">+ Add Goal</button>
+        <button class="btn btn-p btn-sm" onclick='addGoal(${JSON.stringify(String(s.id))})'>+ Add Goal</button>
       </div>
     </div>
     <div class="card">
@@ -2073,11 +2075,11 @@ function openStuModal(id){
     </div>
     ${s.mentor?.feedback?`<div style="font-size:11.5px;font-style:italic;color:var(--text-secondary);padding:9px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);line-height:1.6;margin-bottom:13px">"${s.mentor.feedback}" <strong style="color:var(--ku-dodger)">— ${s.mentor.name||'Mentor'}</strong></div>`:''}
     <div style="display:flex;gap:7px;flex-wrap:wrap">
-      <button class="btn btn-p btn-sm" onclick="closeMo('mo-stu');viewTr(${s.id})">📋 Transcript</button>
-      <button class="btn btn-gold btn-sm" onclick="closeMo('mo-stu');go('competency-wheel');setTimeout(()=>{document.getElementById('cw-sel').value=${s.id};loadWheel();},60)">🎯 Wheel</button>
-      <button class="btn btn-purple btn-sm" onclick="closeMo('mo-stu');loadWalletFor(${s.id})">💳 Wallet</button>
-      <button class="btn btn-g btn-sm" onclick="closeMo('mo-stu');go('learning-record');setTimeout(()=>{document.getElementById('mlr-sel').value=${s.id};loadMLR();},60)">📄 MLR</button>
-      <button class="btn btn-d btn-sm" onclick="closeMo('mo-stu');delStu(${s.id})">🗑 Remove</button>
+      <button class="btn btn-p btn-sm" onclick='closeMo("mo-stu");viewTr(${JSON.stringify(String(s.id))})'>📋 Transcript</button>
+      <button class="btn btn-gold btn-sm" onclick='closeMo("mo-stu");go("competency-wheel");setTimeout(()=>{document.getElementById("cw-sel").value=${JSON.stringify(String(s.id))};loadWheel();},60)'>🎯 Wheel</button>
+      <button class="btn btn-purple btn-sm" onclick='closeMo("mo-stu");loadWalletFor(${JSON.stringify(String(s.id))})'>💳 Wallet</button>
+      <button class="btn btn-g btn-sm" onclick='closeMo("mo-stu");go("learning-record");setTimeout(()=>{document.getElementById("mlr-sel").value=${JSON.stringify(String(s.id))};loadMLR();},60)'>📄 MLR</button>
+      <button class="btn btn-d btn-sm" onclick='closeMo("mo-stu");delStu(${JSON.stringify(String(s.id))})'>🗑 Remove</button>
     </div>`;
   openMo('mo-stu');
 }
