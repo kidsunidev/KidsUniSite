@@ -7,7 +7,21 @@ const app  = express();
 const PORT = process.env.PORT || 3001;
 
 // ── Middleware ────────────────────────────────────────────────
-app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
+const defaultOrigins = [
+  'https://kids-uni-site.vercel.app',
+  'http://localhost:3000'
+];
+const corsOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()).filter(Boolean)
+  : defaultOrigins;
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (corsOrigins.includes('*') || corsOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  }
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
