@@ -233,8 +233,7 @@ input[type=checkbox]{width:auto;accent-color:var(--ku-dodger)}
   <div class="sb-role">
     <div id="db-status-pill" style="display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:8px;background:rgba(0,0,0,0.2);margin-bottom:10px;font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.75)">
       <span id="db-dot" style="width:7px;height:7px;border-radius:50%;background:#f59e0b;flex-shrink:0"></span>
-      <span id="db-label">Demo Mode</span>
-      <span id="db-toggle" onclick="toggleBackendMode()" style="margin-left:auto;cursor:pointer;font-size:9px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.6)">SWITCH</span>
+      <span id="db-label">Connecting…</span>
     </div>
     <div style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:rgba(255,255,255,0.27);margin-bottom:5px;font-weight:700">View As</div>
     <div class="role-pills">
@@ -615,11 +614,10 @@ input[type=checkbox]{width:auto;accent-color:var(--ku-dodger)}
 <script>
 // ═══════════════════════════════════════════════════════════
 // KIDS UNI — BACKEND API ADAPTER v4.0
-// Toggle USE_BACKEND to connect to the Node.js REST API.
-// When false, all data lives in memory (dummy seed).
+// Railway-backed production mode.
 // ═══════════════════════════════════════════════════════════
-const USE_BACKEND   = false;           // ← demo mode (Railway backend disabled)
-const API_TIMEOUT_MS = 8000;           // fallback to demo after 8s
+const USE_BACKEND   = true;
+const API_TIMEOUT_MS = 8000;
 const API_BASE      = 'https://kidsunisite-production.up.railway.app/api';
 let   API_TOKEN     = '';              // set after login
 
@@ -707,7 +705,7 @@ function apiData(payload) {
 }
 
 function backendEnabled() {
-  return !!USE_BACKEND_RUNTIME;
+  return true;
 }
 
 // ── API-backed data operations ───────────────────────────────
@@ -964,28 +962,7 @@ function updateDBStatus(connected, msg) {
   const label = document.getElementById('db-label');
   if (!dot || !label) return;
   dot.style.background   = connected ? '#10b981' : '#f59e0b';
-  label.textContent      = connected ? (msg || 'Live DB') : (msg || 'Demo Mode');
-}
-
-// ── Toggle backend mode at runtime ───────────────────────────
-let USE_BACKEND_RUNTIME = USE_BACKEND;
-function toggleBackendMode() {
-  USE_BACKEND_RUNTIME = !USE_BACKEND_RUNTIME;
-  if (USE_BACKEND_RUNTIME) {
-    updateDBStatus(false, 'Connecting…');
-    apiLogin('admin@kidsuni.edu', 'kidsuni2024')
-      .then(() => DB.bootstrap())
-      .then(() => updateDBStatus(true, 'Live DB ✓'))
-      .catch(err => {
-        USE_BACKEND_RUNTIME = false;
-        updateDBStatus(false, 'Demo Mode');
-        toast('⚠️ Cannot reach API at ' + API_BASE);
-        console.error('API error:', err);
-      });
-  } else {
-    updateDBStatus(false, 'Demo Mode');
-    toast('ℹ️ Switched to demo mode');
-  }
+  label.textContent      = connected ? (msg || 'Live DB') : (msg || 'API Unavailable');
 }
 
 
@@ -2106,38 +2083,31 @@ document.addEventListener('DOMContentLoaded',()=>{
   // Pages are controlled by .ku-active class (set in HTML on page-dashboard)
 
   const safeRun=(name,fn)=>{try{fn();}catch(e){console.error(name+' failed:',e);}};
+  safeRun('renderDashboard',renderDashboard);
+  safeRun('renderNotifications',renderNotifications);
+  safeRun('buildSkillsForm',buildSkillsForm);
+  safeRun('renderJourney',renderJourney);
+  safeRun('populateSelects',populateSelects);
+  safeRun('updateBadge',updateBadge);
+  safeRun('renderGradProfile',renderGradProfile);
+  safeRun('renderCourses',renderCourses);
+  safeRun('renderForum',renderForum);
+  safeRun('renderAnnouncements',renderAnnouncements);
+  safeRun('renderERA',renderERA);
+  safeRun('renderSkillMatrix',renderSkillMatrix);
+  safeRun('renderAnalytics',renderAnalytics);
+  safeRun('renderMessages',renderMessages);
+  safeRun('renderStudents',renderStudents);
 
-  if(backendEnabled()){
-    // ── BACKEND MODE: auto-login then load all data from API ──
-    const apiTimeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), 8000));
-    Promise.race([apiLogin('admin@kidsuni.edu','kidsuni2024'), apiTimeout])
-      .then(()=>DB.bootstrap())
-      .catch(err=>{
-        console.error('API connection failed:',err);
-        toast('⚠️ API unavailable — running in demo mode');
-        bootLocal();
-      });
-  } else {
-    bootLocal();
-  }
-
-  function bootLocal(){
-    safeRun('renderDashboard',renderDashboard);
-    safeRun('renderNotifications',renderNotifications);
-    safeRun('buildSkillsForm',buildSkillsForm);
-    safeRun('renderJourney',renderJourney);
-    safeRun('populateSelects',populateSelects);
-    safeRun('updateBadge',updateBadge);
-    safeRun('renderGradProfile',renderGradProfile);
-    safeRun('renderCourses',renderCourses);
-    safeRun('renderForum',renderForum);
-    safeRun('renderAnnouncements',renderAnnouncements);
-    safeRun('renderERA',renderERA);
-    safeRun('renderSkillMatrix',renderSkillMatrix);
-    safeRun('renderAnalytics',renderAnalytics);
-    safeRun('renderMessages',renderMessages);
-    console.log('Kids Uni v4.0 initialized ✅ (demo mode) - '+students.length+' students, '+courses.length+' courses');
-  }
+  const apiTimeout = new Promise((_,rej) => setTimeout(()=>rej(new Error('timeout')), API_TIMEOUT_MS));
+  updateDBStatus(false, 'Connecting…');
+  Promise.race([apiLogin('admin@kidsuni.edu','kidsuni2024'), apiTimeout])
+    .then(()=>DB.bootstrap())
+    .catch(err=>{
+      console.error('API connection failed:',err);
+      updateDBStatus(false, 'API Unavailable');
+      toast('API unavailable at ' + API_BASE);
+    });
 
   document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
 });
